@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+
+set -eou pipefail
+
+usage() { 
+  echo "Usage: $0 [-p PRODUCT] [-r RELEASE] [-d WORKING-DIRECTORY]
+
+    Defaults:
+    -p  consul
+    -r  1.13.1+ent
+    -d  ${HOME}/Downloads" 1>&2
+}
+
+while getopts ":p:r:d:" options ; do
+  case "${options}" in
+    p) PRODUCT=${OPTARG} ;;
+    r) RELEASE=${OPTARG} ;;
+    d) WORKING_DIR=${OPTARG} ;;
+    *) usage && exit 1 ;;
+  esac
+done
+
+
+PRODUCT="${PRODUCT:-consul}"                   #TODO add check to validate product.
+RELEASE="${RELEASE:-1.13.1+ent}"               # we'll take your word for it.
+WORKING_DIR="${WORKING_DIR:-$HOME/Downloads}"  # this is the download dir.
+
+URL="https://releases.hashicorp.com"
+ARCH="$(uname -m)"
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+TARGET_DIR="/opt/${PRODUCT}-enterprise" # we'll maintain a repository of enterprise binaries here. clean-up, if you choose to, is manual.
+TARGET_SOFTLINK="/usr/local/bin"        # then we'll maintain a softlink here to put a specific version in our path.
+
+update_softlink() {
+  if ! "${TARGET_DIR}/${PRODUCT}-${RELEASE}" -version >/dev/null ; then
+    echo "ERROR: binary test failed"
+    exit 1
+  else
+    if [ -f "${TARGET_SOFTLINK}/${PRODUCT}-ent" ] ; then 
+      echo -e "INFO: sudo being executed to unlink existing '${TARGET_SOFTLINK}/${PRODUCT}-ent' link."
+      sudo unlink "${TARGET_SOFTLINK}/${PRODUCT}-ent" 2>/dev/null
+    fi
+  fi
+  
+  if ! sudo ln -s "${TARGET_DIR}/${PRODUCT}-${RELEASE}" "${TARGET_SOFTLINK}/${PRODUCT}-ent" ; then
+    echo "ERROR: unable to create softlink"
+    exit 1
+  fi
+}
+
+new_release() {
+  # get binary
+  if ! wget --quiet "${URL}/${PRODUCT}/${RELEASE}/${PRODUCT}_${RELEASE}_${OS}_${ARCH}.zip" -O "${WORKING_DIR}/${PRODUCT}_${RELEASE}_${OS}_${ARCH}.zip" ; then
+    echo "ERROR: unable to download ${PRODUCT} ${RELEASE}"
+    exit 1
+  fi
+  echo "SUCCESS: downloaded ${PRODUCT} ${RELEASE}"
+  
+  # get hashes
+  if ! wget --quiet "${URL}/${PRODUCT}/${RELEASE}/${PRODUCT}_${RELEASE}_SHA256SUMS" -O "${WORKING_DIR}/${PRODUCT}_${RELEASE}_SHA256SUMS" ; then
+    echo "ERROR: unable to download ${PRODUCT} ${RELEASE} SHA256SUMS"
+    exit 1
+  fi
+  
+  if ! grep -q "$(openssl sha256 "${WORKING_DIR}/${PRODUCT}_${RELEASE}_${OS}_${ARCH}.zip" | awk '{print $2}')" "${WORKING_DIR}/${PRODUCT}_${RELEASE}_SHA256SUMS" ; then
+    echo "ERROR: sha256 hash did not match"
+    exit 1
+  fi
+  echo "SUCCESS: checksum for binary verified"
+  
+  # extract 
+  if ! command -v unzip >/dev/null ; then
+    echo "ERROR: unzip not found"
+    exit 1
+  fi
+
+  if ! [ -d "${TARGET_DIR}" ] ; then
+    echo -e "INFO: sudo being executed to create directory '${TARGET_DIR}'."
+    if ! ( sudo mkdir -p "${TARGET_DIR}" && sudo chown -R "$USER" "${TARGET_DIR}" ); then
+      echo -e "ERROR: failed to create '${TARGET_DIR}'"
+      exit 1
+    fi
+  fi
+
+  if ! unzip -qo -d "${TARGET_DIR}" "${WORKING_DIR}/${PRODUCT}_${RELEASE}_${OS}_${ARCH}.zip" ; then
+    echo -e "ERROR: unable to extract to '${TARGET_DIR}'"
+    exit 1
+  fi
+  
+  if ! mv "${TARGET_DIR}/${PRODUCT}" "${TARGET_DIR}/${PRODUCT}-${RELEASE}" ; then
+    echo -e "ERROR: failed to rename '${TARGET_DIR}/${PRODUCT}' to '${PRODUCT}-${RELEASE}'"
+    exit 1
+  fi
+}
+
+
+if command -v "${TARGET_DIR}/${PRODUCT}-${RELEASE}" > /dev/null ; then
+  echo "INFO: ${PRODUCT} ${RELEASE} found locally updating softlink only"
+  update_softlink
+else
+  new_release
+  update_softlink
+fi
+
+echo -e "SUCCESS: $(command -v "${PRODUCT}-ent") \n\n$("${PRODUCT}-ent" -version)"
+exit 0
