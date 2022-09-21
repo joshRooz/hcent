@@ -7,7 +7,7 @@ usage() {
 
     Defaults:
     -p  consul
-    -r  1.13.1+ent
+    -r  1.13.2+ent
     -d  ${HOME}/Downloads" 1>&2
 }
 
@@ -22,7 +22,7 @@ done
 
 
 PRODUCT="${PRODUCT:-consul}"                   #TODO add check to validate product.
-RELEASE="${RELEASE:-1.13.1+ent}"               # we'll take your word for it.
+RELEASE="${RELEASE:-1.13.2+ent}"               # we'll take your word for it.
 WORKING_DIR="${WORKING_DIR:-$HOME/Downloads}"  # this is the download dir.
 
 URL="https://releases.hashicorp.com"
