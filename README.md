@@ -8,6 +8,6 @@ Usage: /usr/local/bin/hcent [-p PRODUCT] [-r RELEASE] [-d WORKING-DIRECTORY]
 
     Defaults:
     -p  consul
-    -r  1.13.3+ent
+    -r  1.14.1+ent
     -d  /Users/iamuser/Downloads
 ```
